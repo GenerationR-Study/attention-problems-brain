@@ -1,37 +1,13 @@
-# ==============================================================================
-#  Make this your own wizard
-# ==============================================================================
-#  Fill in the folder below and this app stops asking where the results are:
-#  it loads them at startup and opens on an About page describing them.
-#
-#  Leave it empty (as it is here) and the app keeps its welcome page, where any
-#  folder can be typed in -- which is how the public demo runs.
-#
-#  Nothing else in the repository needs editing, so you can keep pulling
-#  updates from github.com/SereDef/verywise-wizard without conflicts.
-# ==============================================================================
-
 [results]
-# A path inside this repository, or a directory in a public GitHub repo
-# e.g. folder = "./results" or (slower option) "https://github.com/your-name/your-project/tree/main/results"
-folder = ""
-
-# Which software produced them: "verywise" or "QDECR"
+folder = "./results"
 software = "verywise"
 
-
 [about]
-# Shown in the browser tab, and as the heading on the home page
-#   title = "Associations of Wisdom with Cortical Thickness"
-
-# Shown on the home page, above the summary of your results. Markdown.
-#   intro = """
-#   Vertex-wise maps from **Defina et al. (2026)** exploring the relationship
-#   between wisdom and cortical thickness.
-#   """
-
+title = "Attention problems and brain morphology changes across adolescence"
+intro = """
+Vertex-wise maps from **Dijkzeul et al. (in prep)** exploring the relationship
+between attention problem scores and cortical thickness ad area over time.
+"""
 
 [repo]
-# Your own repository. When set, the navbar links to it and notes that this
-# wizard was forked.
-#   url = "https://github.com/your-name/your-project"
+url = "https://github.com/your-name/your-wizard"

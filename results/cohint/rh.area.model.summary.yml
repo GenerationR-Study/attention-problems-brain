@@ -1,0 +1,401 @@
+model: ~ att * cohort + age + age2 + sex + educm + psych_m + tobacco + age_m + (1
+  | idc) + (1 | site) + (1 | ethn)
+n_datasets: 30
+n_observations: 25064
+n_observations_effective: 25064
+n_groups:
+  idc: 12714
+  site: 23
+  ethn: 11
+n_vertices: 163842
+n_vertices_effective: 143293
+model_fit:
+  Singular fits:
+    count: 0.0
+    percent: 0.0
+  AIC:
+    min: -124608.8438
+    median: -58252.8047
+    max: -31090.0879
+  Conditional R²:
+    min: 0.4025
+    median: 0.8282
+    max: 0.907
+  Marginal R²:
+    min: 0.0105
+    median: 0.0686
+    max: 0.1647
+  ICC:
+    idc:
+      min: 0.3175
+      median: 0.782
+      max: 0.8891
+    site:
+      min: 0.0
+      median: 0.0134
+      max: 0.1378
+    ethn:
+      min: 0.0
+      median: 0.0159
+      max: 0.06
+results:
+  (Intercept):
+    n_clusters: 1
+    coef_summary:
+      min: 0.2497
+      median: 0.568
+      max: 1.0875
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 143291
+      cluster_area: 73687.24
+      cluster_p: 0.0001
+      peak_id: 0
+      peak_ROI: precentral
+      min_coef: 0.2497042
+      median_coef: 0.5680387
+      max_coef: 1.0874858
+  att:
+    n_clusters: 7
+    coef_summary:
+      min: -0.0044
+      median: -0.0016
+      max: 0.0004
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 21604
+      cluster_area: 9902.4
+      cluster_p: 0.0001
+      peak_id: 75052
+      peak_ROI: superiortemporal
+      min_coef: -0.003125
+      median_coef: -0.0017868
+      max_coef: -0.0004215
+    - cluster_id: 2
+      cluster_size: 14304
+      cluster_area: 8698.38
+      cluster_p: 0.0001
+      peak_id: 98625
+      peak_ROI: precuneus
+      min_coef: -0.0042213
+      median_coef: -0.0028248
+      max_coef: -0.0007816
+    - cluster_id: 3
+      cluster_size: 10742
+      cluster_area: 6053.52
+      cluster_p: 0.0001
+      peak_id: 20462
+      peak_ROI: superiorfrontal
+      min_coef: -0.0037634
+      median_coef: -0.0021502
+      max_coef: -0.0011807
+    - cluster_id: 4
+      cluster_size: 4760
+      cluster_area: 2747.72
+      cluster_p: 0.0001
+      peak_id: 2127
+      peak_ROI: rostralmiddlefrontal
+      min_coef: -0.0044364
+      median_coef: -0.0033626
+      max_coef: -0.001877
+    - cluster_id: 5
+      cluster_size: 1873
+      cluster_area: 1240.09
+      cluster_p: 0.0001
+      peak_id: 101369
+      peak_ROI: lateraloccipital
+      min_coef: -0.0039166
+      median_coef: -0.0033053
+      max_coef: -0.002384
+    - cluster_id: 6
+      cluster_size: 763
+      cluster_area: 347.99
+      cluster_p: 0.0025
+      peak_id: 59787
+      peak_ROI: postcentral
+      min_coef: -0.0017239
+      median_coef: -0.0014146
+      max_coef: -0.0009522
+    - cluster_id: 7
+      cluster_size: 510
+      cluster_area: 246.77
+      cluster_p: 0.0179
+      peak_id: 82152
+      peak_ROI: postcentral
+      min_coef: -0.001586
+      median_coef: -0.0013337
+      max_coef: -0.0009442
+  cohortABCD:
+    n_clusters: 3
+    coef_summary:
+      min: -0.1598
+      median: 0.0137
+      max: 0.1094
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 2910
+      cluster_area: 2437.64
+      cluster_p: 0.0001
+      peak_id: 118298
+      peak_ROI: lingual
+      min_coef: -0.1598246
+      median_coef: -0.0926225
+      max_coef: -0.0287305
+    - cluster_id: 2
+      cluster_size: 605
+      cluster_area: 375.98
+      cluster_p: 0.0013
+      peak_id: 39941
+      peak_ROI: fusiform
+      min_coef: 0.0289102
+      median_coef: 0.0546524
+      max_coef: 0.09914
+    - cluster_id: 3
+      cluster_size: 368
+      cluster_area: 242.15
+      cluster_p: 0.0197
+      peak_id: 120277
+      peak_ROI: superiorparietal
+      min_coef: -0.077131
+      median_coef: -0.0686068
+      max_coef: -0.0503322
+  age:
+    n_clusters: 3
+    coef_summary:
+      min: -0.0102
+      median: 0.0043
+      max: 0.0333
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 84925
+      cluster_area: 47241.57
+      cluster_p: 0.0001
+      peak_id: 4
+      peak_ROI: superiorfrontal
+      min_coef: 0.0009731
+      median_coef: 0.0080954
+      max_coef: 0.0332847
+    - cluster_id: 2
+      cluster_size: 13565
+      cluster_area: 5967.01
+      cluster_p: 0.0001
+      peak_id: 18
+      peak_ROI: superiorparietal
+      min_coef: -0.0101692
+      median_coef: -0.0048598
+      max_coef: -0.0013497
+    - cluster_id: 3
+      cluster_size: 956
+      cluster_area: 476.01
+      cluster_p: 0.0002
+      peak_id: 106786
+      peak_ROI: precuneus
+      min_coef: -0.0051174
+      median_coef: -0.0036657
+      max_coef: -0.0023283
+  age2:
+    n_clusters: 4
+    coef_summary:
+      min: -0.0012
+      median: -0.0002
+      max: 0.0003
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 98171
+      cluster_area: 53473.88
+      cluster_p: 0.0001
+      peak_id: 2
+      peak_ROI: postcentral
+      min_coef: -0.0011768
+      median_coef: -0.0002721
+      max_coef: -3.6243924e-05
+    - cluster_id: 2
+      cluster_size: 3319
+      cluster_area: 1420.38
+      cluster_p: 0.0001
+      peak_id: 81494
+      peak_ROI: superiorparietal
+      min_coef: 8.7387416e-05
+      median_coef: 0.0001503
+      max_coef: 0.0002196
+    - cluster_id: 3
+      cluster_size: 1019
+      cluster_area: 391.15
+      cluster_p: 0.0009
+      peak_id: 65425
+      peak_ROI: precentral
+      min_coef: 7.6058415e-05
+      median_coef: 0.0001461
+      max_coef: 0.0002087
+    - cluster_id: 4
+      cluster_size: 657
+      cluster_area: 280.32
+      cluster_p: 0.01
+      peak_id: 83665
+      peak_ROI: lateralorbitofrontal
+      min_coef: 0.0001359
+      median_coef: 0.0002194
+      max_coef: 0.0003291
+  sexgirl:
+    n_clusters: 1
+    coef_summary:
+      min: -0.1634
+      median: -0.0541
+      max: -0.009
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 143291
+      cluster_area: 73687.24
+      cluster_p: 0.0001
+      peak_id: 0
+      peak_ROI: precentral
+      min_coef: -0.163434
+      median_coef: -0.0541495
+      max_coef: -0.009048
+  educmMedium:
+    n_clusters: 1
+    coef_summary:
+      min: -0.0029
+      median: 0.0047
+      max: 0.0177
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 627
+      cluster_area: 235.13
+      cluster_p: 0.0218
+      peak_id: 9763
+      peak_ROI: insula
+      min_coef: 0.0026512
+      median_coef: 0.0051288
+      max_coef: 0.0076495
+  educmHigh:
+    n_clusters: 5
+    coef_summary:
+      min: 0.0007
+      median: 0.0117
+      max: 0.0313
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 70142
+      cluster_area: 37129.21
+      cluster_p: 0.0001
+      peak_id: 139010
+      peak_ROI: insula
+      min_coef: 0.0028644
+      median_coef: 0.0150617
+      max_coef: 0.0313081
+    - cluster_id: 2
+      cluster_size: 2272
+      cluster_area: 1553.65
+      cluster_p: 0.0001
+      peak_id: 148539
+      peak_ROI: lingual
+      min_coef: 0.0092168
+      median_coef: 0.0157306
+      max_coef: 0.0190155
+    - cluster_id: 3
+      cluster_size: 2773
+      cluster_area: 1178.59
+      cluster_p: 0.0001
+      peak_id: 78159
+      peak_ROI: precuneus
+      min_coef: 0.0053369
+      median_coef: 0.0115308
+      max_coef: 0.0156903
+    - cluster_id: 4
+      cluster_size: 775
+      cluster_area: 308.47
+      cluster_p: 0.0061
+      peak_id: 81020
+      peak_ROI: paracentral
+      min_coef: 0.0048411
+      median_coef: 0.0074467
+      max_coef: 0.0109973
+    - cluster_id: 5
+      cluster_size: 704
+      cluster_area: 263.52
+      cluster_p: 0.0145
+      peak_id: 8416
+      peak_ROI: supramarginal
+      min_coef: 0.0080824
+      median_coef: 0.0128808
+      max_coef: 0.0148606
+  psych_m:
+    n_clusters: 0
+    coef_summary:
+      min: -0.0041
+      median: -0.0001
+      max: 0.0035
+  tobaccoyes:
+    n_clusters: 0
+    coef_summary:
+      min: -0.0249
+      median: -0.0047
+      max: 0.0036
+  age_m:
+    n_clusters: 5
+    coef_summary:
+      min: -0.0006
+      median: 0.0004
+      max: 0.0016
+    cluster_summary:
+    - cluster_id: 1
+      cluster_size: 26865
+      cluster_area: 13409.06
+      cluster_p: 0.0001
+      peak_id: 15010
+      peak_ROI: medialorbitofrontal
+      min_coef: 0.0002049
+      median_coef: 0.0007546
+      max_coef: 0.0012681
+    - cluster_id: 2
+      cluster_size: 8883
+      cluster_area: 3977.89
+      cluster_p: 0.0001
+      peak_id: 85715
+      peak_ROI: posteriorcingulate
+      min_coef: 0.0002571
+      median_coef: 0.0005901
+      max_coef: 0.0008788
+    - cluster_id: 3
+      cluster_size: 4051
+      cluster_area: 2323.12
+      cluster_p: 0.0001
+      peak_id: 62496
+      peak_ROI: fusiform
+      min_coef: 0.0004235
+      median_coef: 0.0010156
+      max_coef: 0.0016012
+    - cluster_id: 4
+      cluster_size: 1796
+      cluster_area: 761.72
+      cluster_p: 0.0001
+      peak_id: 35695
+      peak_ROI: insula
+      min_coef: 0.0002373
+      median_coef: 0.0004355
+      max_coef: 0.000683
+    - cluster_id: 5
+      cluster_size: 648
+      cluster_area: 273.28
+      cluster_p: 0.0116
+      peak_id: 133191
+      peak_ROI: superiorparietal
+      min_coef: 0.000541
+      median_coef: 0.0006559
+      max_coef: 0.0007579
+  att:cohortABCD:
+    n_clusters: 0
+    coef_summary:
+      min: -0.0018
+      median: 0.0002
+      max: 0.0024
+cluster_correction:
+  fwhm: 18.0
+  mcz_threshold: 30.0
+  cwp_threshold: 0.025
+covariance_between_terms: 3and12
+random_seed: 3108
+date: '2026-09-12'
+computation_time_min: 2794.7483064
+verywise_version: 1.3.8
