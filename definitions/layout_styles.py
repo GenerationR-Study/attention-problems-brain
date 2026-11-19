@@ -78,6 +78,74 @@ MAP_ROW =  f'display: flex; align-items: center; ' \
 
 INFO_MESSAGE = 'text-align: center; padding-top: 10px; padding-bottom: 10px'
 
+# --- The model summaries on the home page -------------------------------------
+SUMMARY_DETAILS = f'margin: 6px 0; padding: 8px 12px; border-radius: 10px; ' \
+                  f'border: 1px solid {VW_COLOR_PALETTE["light-blue"]}; ' \
+                  f'background-color: white'
+
+# How much of the surface a term's clusters cover, drawn beside the count:
+# an empty track with a filled part, as in the great-tables examples
+COVERAGE_BAR_WIDTH = 46  # px, the full width of the track
+
+COVERAGE_TRACK = f'display: inline-block; width: {COVERAGE_BAR_WIDTH}px; ' \
+                 f'height: 7px; border-radius: 4px; ' \
+                 f'background-color: {VW_COLOR_PALETTE["light-blue"]}'
+
+def coverage_fill(width_px):
+    return (f'display: block; width: {width_px}px; height: 7px; '
+            f'border-radius: 4px; '
+            f'background-color: {VW_COLOR_PALETTE["deep-blue"]}')
+
+# Rules that cannot be set inline: the fold's own marker and the radio buttons
+# are drawn by the browser, so they are only reachable through a stylesheet
+HOME_CSS = f"""
+/* The triangle on each collapsible model */
+details > summary {{ cursor: pointer; }}
+details > summary::marker,
+details > summary::-webkit-details-marker {{ color: {VW_COLOR_PALETTE["deep-blue"]}; }}
+
+/* 'Analyses ran using:' and any other radio or checkbox.
+
+   Shiny for Python still writes bootstrap 3 markup here -- a bare
+   <input type="radio"> inside <label class="radio-inline"> -- so there is no
+   .form-check-input to hook on to. accent-color is what actually tints the
+   control the browser draws; the border and background are for older ones. */
+.shiny-input-container .radio input[type="radio"],
+.shiny-input-container .radio-inline input[type="radio"],
+.shiny-input-container .checkbox input[type="checkbox"],
+.shiny-input-container .checkbox-inline input[type="checkbox"] {{
+    accent-color: {VW_COLOR_PALETTE["deep-blue"]};
+    border: 1px solid {VW_COLOR_PALETTE["deep-blue"]};
+}}
+.shiny-input-container .radio input[type="radio"]:checked,
+.shiny-input-container .radio-inline input[type="radio"]:checked,
+.shiny-input-container .checkbox input[type="checkbox"]:checked,
+.shiny-input-container .checkbox-inline input[type="checkbox"]:checked {{
+    background-color: {VW_COLOR_PALETTE["deep-blue"]};
+}}
+
+/* A term that found no clusters: shown, but not worth opening */
+.selectize-dropdown [data-disabled],
+.selectize-dropdown .option[data-disabled] {{
+    color: {VW_COLOR_PALETTE["light-grey"]};
+    cursor: not-allowed;
+}}
+
+/* The selectize dropdowns, where an option is highlighted or chosen */
+.selectize-dropdown .active {{
+    background-color: {VW_COLOR_PALETTE["light-blue"]};
+    color: {VW_COLOR_PALETTE["deep-blue"]};
+}}
+"""
+
+# Everything below the <summary> line is indented clear of the fold's marker,
+# so it sits under the formula rather than under the triangle
+SUMMARY_BODY = 'padding-left: 26px'
+
+# The two summary tables sit beside each other, and stack on a narrow window
+SUMMARY_TABLE_ROW = 'display: flex; flex-wrap: wrap; gap: 60px; ' \
+                    'align-items: flex-start; margin-top: 4px'
+
 # The download buttons sit in a narrow column, where bootstrap would wrap the
 # icon and the label onto two lines: nowrap keeps them on one, and the flexbox
 # centres the pair instead of leaving them against the left edge.

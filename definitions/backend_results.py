@@ -16,6 +16,7 @@ compute_overlap     : combine two VWResults -> (info, overlap maps)
 import os
 import re
 import shutil
+from functools import lru_cache
 from pathlib import Path
 from typing import NamedTuple
 
@@ -123,6 +124,87 @@ def parse_directory_structure(resdir):
             for f in filenames if f.endswith('coef.mgh')]
 
 
+# ===== MODEL SUMMARIES ========================================================
+# verywise >= 1.3 writes one <hemi>.<measure>.model.summary.yml per model, with
+# the formula, the sample, the fit and -- most usefully -- how many clusters
+# each term produced. QDECR writes none, and neither did older verywise runs,
+# so everything built on these has to cope with their absence.
+
+SUMMARY_SUFFIX = '.model.summary.yml'
+
+
+@lru_cache(maxsize=256)
+def read_model_summary(path):
+    """One summary file as nested dicts, or None if it cannot be read."""
+    import yaml  # only needed where summaries exist, so imported late
+
+    try:
+        with open(path) as f:
+            return yaml.safe_load(f)
+    except (OSError, yaml.YAMLError) as err:
+        print(f'[verywise-wizard] ignoring unreadable summary {path}: {err}',
+              flush=True)
+        return None
+
+
+def find_model_summaries(resdir, results_format):
+    """
+    Every summary file under `resdir`, keyed as {'group/model': {(meas, hemi)}}.
+
+    The keys match what the rest of the app calls a model, so a summary can be
+    looked up straight from a selection.
+    """
+    if results_format != 'verywise':
+        return {}
+
+    summaries = {}
+
+    for root, _, filenames in os.walk(resdir):
+        for name in sorted(filenames):
+            if not name.endswith(SUMMARY_SUFFIX):
+                continue
+
+            summary = read_model_summary(os.path.join(root, name))
+            if summary is None:
+                continue
+
+            # Same naming as the coefficient files one directory up
+            model = (os.path.basename(root) if root == resdir
+                     else root.replace(f'{resdir}/', ''))
+            hemi, meas = parse_verywise_filenames(name)
+
+            summaries.setdefault(f'{model}/{model}', {})[(meas, hemi)] = summary
+
+    return summaries
+
+
+def model_summaries(all_results, which_model):
+    """Every summary for one model, keyed by (measure, hemisphere)."""
+    return all_results.get('summaries', {}).get(which_model, {})
+
+
+def terms_without_clusters(all_results, which_model, which_meas):
+    """
+    The terms that found nothing in either hemisphere, for one measure.
+
+    Taken from the summaries, so this costs no file reading: knowing it up
+    front is what lets the app grey those terms out instead of drawing an
+    empty brain for them. Empty where there are no summaries (QDECR, or
+    verywise before 1.3), which simply leaves every term selectable.
+    """
+    summaries = model_summaries(all_results, which_model)
+
+    found = {}
+    for (meas, _hemi), summary in summaries.items():
+        if meas != which_meas:
+            continue
+
+        for term, result in (summary.get('results') or {}).items():
+            found[term] = found.get(term, 0) + (result.get('n_clusters') or 0)
+
+    return {term for term, total in found.items() if total == 0}
+
+
 def _split_meas(parts, start):
     """Join parts[start:start+2] when they form one of the dotted measure names."""
     two = '.'.join(parts[start:start + 2])
@@ -178,7 +260,9 @@ def detect_models(resdir, results_format):
 
     return {'results_directory': resdir,
             'results_format': results_format,
-            'results': {group: data for group, data in res.groupby('group')}}
+            'results': {group: data for group, data in res.groupby('group')},
+            # Empty for QDECR, and for verywise runs older than 1.3
+            'summaries': find_model_summaries(resdir, results_format)}
 
 
 def model_dir(all_results, which_model, which_meas=None, hemi=None):

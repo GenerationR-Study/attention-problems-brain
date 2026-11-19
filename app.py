@@ -30,7 +30,8 @@ start_folder = './verywise_example_results'
 
 app_ui = ui.page_fillable(
     ui.page_navbar(
-        ui.head_content(ui.tags.style(styles.NAVBAR_CSS)),
+        ui.head_content(ui.tags.style(styles.NAVBAR_CSS),
+                        ui.tags.style(styles.HOME_CSS)),
 
         # ui.nav_spacer(),
         welcome_page(start_folder, tab_name='welcome_tab'),
