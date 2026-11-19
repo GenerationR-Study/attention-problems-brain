@@ -249,7 +249,12 @@ def _cluster_table(summaries, keys):
     # and append anything only later files mention
     terms = []
     for key in keys:
-        for term in (summaries[key].get('results') or {}):
+        results = summaries[key].get('results') or {}
+        for term, result in results.items():
+            # Without cluster correction a term is summarised by its
+            # coefficients alone, and there is no cluster table to draw
+            if 'n_clusters' not in result:
+                continue
             if term not in terms and term != '(Intercept)':
                 terms.append(term)
 
@@ -350,6 +355,21 @@ def _fit_table(summaries, keys):
                     keys)
 
 
+FULL_MESH = 163842  # fsaverage; anything coarser is flagged as low resolution
+
+
+def _low_res_note(summary):
+    """Say so, in the fold's own line, when a model is not on the full mesh."""
+    n_vertices = summary.get('n_vertices')
+
+    if not n_vertices or n_vertices >= FULL_MESH:
+        return ''
+
+    return (f'<span style="{styles.LOW_RES_NOTE}" '
+            f'title="fitted on {n_vertices:,} vertices, not the full '
+            f'{FULL_MESH:,}">*low res</span>')
+
+
 def summary_block(model_name, summaries, open_=False):
     """
     One model, as verywise described it, folded away behind its name and
@@ -362,7 +382,8 @@ def summary_block(model_name, summaries, open_=False):
 
     return (f'<details{" open" if open_ else ""} '
             f'style="{styles.SUMMARY_DETAILS}">'
-            f'<summary><b>{model_name}</b>&emsp;<code>{formula}</code></summary>'
+            f'<summary><b>{model_name}</b>&emsp;<code>{formula}</code>'
+            f'{_low_res_note(first)}</summary>'
             f'<div style="{styles.SUMMARY_BODY}">'
             f'<div style="margin-top: 6px">{_scale_line(first)}</div>'
             f'<div style="{styles.SUMMARY_TABLE_ROW}">'

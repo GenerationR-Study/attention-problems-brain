@@ -10,10 +10,13 @@ from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
 import definitions.layout_styles as styles
 from definitions import plotting as vwp
 from definitions.backend_results import (
-    compute_difference, compute_overlap, extract_results,
+    compute_difference, compute_overlap, extract_results, is_same_mesh,
+    shared_vertices,
 )
 from definitions.pages.common import (
-    button_column, figure_outputs, figures_row, info_row, nav_title,
+    available_displays, available_resolutions, button_column,
+    default_resolution, figure_outputs, figures_row, info_row,
+    mark_unselectable, nav_title, resolution_ceiling, resolution_output,
     roi_choice, selection_pane, set_if_changed,
 )
 from definitions.pages.download import (
@@ -57,9 +60,9 @@ def compare_ui():
             selection_pane(
                 map_band('A', 'map_a'),
                 map_band('B', 'map_b'),
-                ui.input_selectize(id='compare_mode', label='Comparison',
-                                   choices=styles.COMPARE_MODES,
-                                   selected='difference', width='100%'),
+                # Rendered by the server: cluster overlap needs both maps to
+                # have been cluster corrected
+                ui.output_ui('compare_mode_ui'),
                 roi_choice('select_roi'),
                 col_widths=(12, 12, 2, 10),
             ),
@@ -95,18 +98,55 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
                                        input.select_resolution(),
                                        selected_roi()))
 
+    @render.ui
+    def compare_mode_ui():
+        overlap_ok = all(
+            'clusters' in available_displays(all_results(), model, meas)
+            for model, _term, meas in (selection_a(), selection_b()))
+
+        return mark_unselectable(
+            ui.input_selectize(id='compare_mode', label='Comparison',
+                               choices=styles.COMPARE_MODES,
+                               selected='difference', width='100%'),
+            set() if overlap_ok else {'overlap'})
+
+    @render.ui
+    def resolution_ui():
+        # The coarser of the two maps is the ceiling: neither can be drawn on
+        # a mesh finer than itself
+        available = available_resolutions(resolution_ceiling(
+            all_results(), selection_a()[0], selection_b()[0]))
+
+        return resolution_output('select_resolution', available,
+                                 default_resolution(available))
+
     @reactive.Calc
     def both_results():
         (model_a, term_a, meas_a), (model_b, term_b, meas_b), mode = req(maps_settings())
 
         with ui.Progress(min=0, max=2) as p:
             p.set(0, message='Loading the first map...')
-            result_a = extract_results(all_results(), model_a, term_a, meas_a)
+            result_a = _read(model_a, term_a, meas_a, mode)
 
             p.set(1, message='Loading the second map...')
-            result_b = extract_results(all_results(), model_b, term_b, meas_b)
+            result_b = _read(model_b, term_b, meas_b, mode)
 
         return mode, result_a, result_b
+
+    def _read(which_model, which_term, which_meas, mode):
+        """
+        Read one of the two maps.
+
+        Overlap needs the clusters themselves. A difference only needs the
+        betas, so it is taken unthresholded, which is what lets a model that
+        was never cluster corrected be compared at all.
+        """
+        if mode == 'overlap':
+            return extract_results(all_results(), which_model, which_term,
+                                   which_meas)
+
+        return extract_results(all_results(), which_model, which_term,
+                               which_meas, mask_source=None)
 
     @reactive.Calc
     def compare_args():
@@ -134,10 +174,31 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
                     mode=vwp.COLORBAR, tick_text=styles.OVERLAP_TICK_LABELS,
                     overlap_info=info)
 
+    def _mesh_warning(result_a, result_b):
+        """
+        Say so when the two maps were not fitted on the same mesh.
+
+        The comparison still runs -- the finer map is cut down to the coarser
+        one's vertices, which line up because the fsaverage meshes nest -- but
+        it is only ever about the part they share, and that has to be said.
+        """
+        if is_same_mesh(result_a, result_b):
+            return ''
+
+        sizes = {name: sum(len(result.betas[hemi]) for hemi in ('left', 'right'))
+                 for name, result in (('A', result_a), ('B', result_b))}
+        shared = sum(shared_vertices(result_a, result_b).values())
+
+        return (f'</br>⚠️ **A** has <ins>{sizes["A"]:,}</ins> vertices but '
+                f'**B** has <ins>{sizes["B"]:,}</ins>: only the '
+                f'<ins>{shared:,}</ins> they share are compared.')
+
     @render.text
     def info():
         mode, result_a, result_b = both_results()
         (model_a, _, meas_a), (model_b, _, meas_b), _ = maps_settings()
+
+        mesh_warning = _mesh_warning(result_a, result_b)
 
         if mode == 'difference':
             difference = compute_difference(result_a, result_b)
@@ -155,7 +216,7 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
                 f'**{model_a}** − **{model_b}**</br>'
                 f'Mean difference [range] = **{np.nanmean(both):.2f}** '
                 f'[{np.nanmin(both):.2f}; {np.nanmax(both):.2f}]'
-                f'{warning}')
+                f'{warning}{mesh_warning}')
 
         ovlp_info = compare_args()['overlap_info']
 
@@ -169,7 +230,8 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
         return ui.markdown(
             f'There was a {text[3]} {legend[3]} **overlap** between the maps selected:</br>'
             f'{text[1]} was unique to {legend[1]} **A** — {model_a} (<ins>{meas_a}</ins>)</br>'
-            f'{text[2]} was unique to {legend[2]} **B** — {model_b} (<ins>{meas_b}</ins>)')
+            f'{text[2]} was unique to {legend[2]} **B** — {model_b} (<ins>{meas_b}</ins>)'
+            f'{mesh_warning}')
 
     @reactive.Calc
     def figure_title():

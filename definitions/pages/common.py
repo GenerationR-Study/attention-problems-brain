@@ -6,12 +6,15 @@ Anything that appears on more than one page lives here, so the page modules
 only hold what is actually particular to them.
 """
 from faicons import icon_svg
+from htmltools import Tag, TagList
 from shiny import reactive, req, ui
 from shinywidgets import output_widget, render_plotly
 
 import definitions.layout_styles as styles
 from definitions import plotting as vwp
-from definitions.backend_results import cluster_stats
+from definitions.backend_results import (
+    available_masks, cluster_stats, model_resolution,
+)
 from definitions.config import CONFIG, UPSTREAM_NAME, UPSTREAM_REPO
 from definitions.plotting.atlas import region_names
 
@@ -65,6 +68,101 @@ def set_if_changed(value, new):
     with reactive.isolate():
         if value() != new:
             value.set(new)
+
+
+# ------------------------------------------------------------------------------
+# What a model can actually show
+# ------------------------------------------------------------------------------
+# A model only offers what its files support: no cluster map means no CWS or
+# cluster view, no p map means no uncorrected threshold, and a model fitted on
+# a coarse mesh cannot be drawn on a finer one. The options stay in the menu
+# either way, greyed out, so it is clear what the analysis did not produce.
+
+def mark_unselectable(tag, values):
+    """
+    Grey out some options of a selectize input, and stop them being chosen.
+
+    selectize reads 'data-disabled' off each <option> (its disabledField), so
+    marking them here is enough: the rest of the input is built by shiny as
+    usual. Walks the tag it was given, since input_selectize takes no
+    per-option arguments.
+    """
+    if not values:
+        return tag
+
+    def walk(node):
+        if isinstance(node, TagList):
+            for child in node:
+                walk(child)
+            return
+
+        if not isinstance(node, Tag):
+            return
+
+        if node.name == 'option' and str(node.attrs.get('value')) in values:
+            node.attrs['data-disabled'] = 'true'
+            node.attrs['disabled'] = ''
+
+        for child in node.children:
+            walk(child)
+
+    walk(tag)
+
+    return tag
+
+
+def available_displays(all_results, which_model, which_meas):
+    """The Display options this model has the files for."""
+    masks = available_masks(all_results, which_model, which_meas)
+
+    return {key for key, (source, _) in styles.DISPLAY_MASKS.items()
+            if source is None or source in masks}
+
+
+def default_display(available):
+    """
+    What to open on: the cluster-corrected view where there is one, then the
+    uncorrected and FDR thresholds, and only then the unthresholded map.
+    """
+    for key in ('betas_cws', 'betas_p05', 'betas_fdr05', 'betas_all'):
+        if key in available:
+            return key
+
+    return None
+
+
+def available_resolutions(*ceilings):
+    """
+    The templates that are no finer than the data.
+
+    A coarser mesh can be drawn from a finer map, since the fsaverage meshes
+    nest, but not the other way round. An unknown ceiling (no summary) leaves
+    every option open, which is how QDECR results behave.
+    """
+    known = [c for c in ceilings if c]
+    if not known:
+        return set(styles.RESOLUTION_NAMES)
+
+    ceiling = min(known)
+
+    return {key for key in styles.RESOLUTION_NAMES
+            if vwp.FS_TEMPLATES[key] <= ceiling}
+
+
+def default_resolution(available):
+    """Low where the data allows it, otherwise the finest that it does."""
+    if 'fsaverage5' in available:
+        return 'fsaverage5'
+
+    by_size = sorted(available, key=lambda key: vwp.FS_TEMPLATES[key])
+
+    return by_size[-1] if by_size else None
+
+
+def resolution_ceiling(all_results, *models):
+    """The mesh size shared by every model given, or None when unknown."""
+    return min((model_resolution(all_results, m) or 0 for m in models),
+               default=0) or None
 
 
 # ------------------------------------------------------------------------------
@@ -145,13 +243,29 @@ def surface_choice(id_):
                            selected='pial', icon='globe')
 
 
-def resolution_choice(id_):
+def resolution_output(id_, available, selected):
+    """The resolution control, with templates finer than the data greyed out."""
+    return mark_unselectable(
+        resolution_choice(id_, selected=selected),
+        {key for key in styles.RESOLUTION_NAMES if key not in available})
+
+
+def display_output(id_, available, selected):
+    """The Display control, with the options this model cannot draw greyed out."""
+    return mark_unselectable(
+        ui.input_selectize(id=id_, label='Display',
+                           choices=styles.OUTPUT_NAMES, selected=selected,
+                           width='100%'),
+        {key for key in styles.OUTPUT_NAMES if key not in available})
+
+
+def resolution_choice(id_, selected='fsaverage5'):
     # Low by default: the brains cross the websocket as one message, and
     # fsaverage6 makes that 10.5 MB against 2.6 MB for fsaverage5 -- four times
     # more to transfer and draw, for a mesh difference that is barely visible at
     # the size the card shows. Higher resolutions stay one click away.
     return _toolbar_select(id_, 'Resolution', styles.RESOLUTION_NAMES,
-                           selected='fsaverage5', icon='microscope')
+                           selected=selected, icon='microscope')
 
 
 def button_column(*extra):
@@ -186,8 +300,10 @@ def brains_card(surface_id='select_surface', resolution_id='select_resolution'):
     """
     return ui.card(
         ui.card_header('Brain surface maps',
+                       # The resolution is rendered by the server: which
+                       # templates are offered depends on the data's own mesh
                        ui.toolbar(surface_choice(surface_id),
-                                  resolution_choice(resolution_id),
+                                  ui.output_ui('resolution_ui'),
                                   align='right')),
         output_widget('brains'),
         full_screen=True)  # expand icon appears when hovering over the card body

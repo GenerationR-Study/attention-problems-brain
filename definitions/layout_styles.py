@@ -199,11 +199,31 @@ SURFACE_NAMES = {'pial': 'Pial',
                  'flat': 'Flat'}
 
 # Listed cheapest first, since Low is the default
-RESOLUTION_NAMES = {'fsaverage5': 'Low (10k nodes)',
+RESOLUTION_NAMES = {'fsaverage4': 'Very low (2.5k nodes)',
+                    'fsaverage5': 'Low (10k nodes)',
                     'fsaverage6': 'Medium (41k nodes)',
                     'fsaverage': 'High (164k nodes)'}
 
-OUTPUT_NAMES = {'betas': 'Beta values', 'clusters': 'Clusters'}
+# What to draw, and what each option needs. The ones whose files a model does
+# not have are shown greyed out rather than hidden, so it stays clear what the
+# analysis did and did not produce. See DISPLAY_MASKS for what backs each one.
+OUTPUT_NAMES = {'betas_cws': 'Beta values (CWS)',
+                'clusters': 'Clusters',
+                'betas_all': 'Beta values (all)',
+                'betas_p05': 'Beta values (p < 0.05)',
+                'betas_p01': 'Beta values (p < 0.01)',
+                'betas_fdr05': 'Beta values (FDR p < 0.05)',
+                'betas_fdr01': 'Beta values (FDR p < 0.01)'}
+
+# display option -> (mask source, threshold). A source of None shows every
+# vertex that was fitted, and needs nothing but the coefficient map.
+DISPLAY_MASKS = {'betas_cws': ('cws', None),
+                 'clusters': ('cws', None),
+                 'betas_all': (None, None),
+                 'betas_p05': ('p', 0.05),
+                 'betas_p01': ('p', 0.01),
+                 'betas_fdr05': ('fdr', 0.05),
+                 'betas_fdr01': ('fdr', 0.01)}
 
 COMPARE_MODES = {'difference': 'Difference (A − B)',
                  'overlap': 'Cluster overlap'}
@@ -214,6 +234,10 @@ OVERLAP_TICK_LABELS = ['A only', 'B only', 'Both']
 DOWNLOAD_FORMATS = {'png': 'PNG', 'html': 'HTML'}
 
 BETA_LABEL = 'Observed β values'
+
+# Flagged on a model fitted to a coarser mesh, in the fold's own summary line
+# so that it is visible while the model is collapsed
+LOW_RES_NOTE = f'float: right; font-weight: bold; color: {VW_COLOR_PALETTE["dark-red"]}'
 
 # One colour per overlap code: 1 = first map only, 2 = second map only, 3 = both
 OVLP_COLORS = ['#333399',                     # blue

@@ -168,12 +168,11 @@ def find_model_summaries(resdir, results_format):
             if summary is None:
                 continue
 
-            # Same naming as the coefficient files one directory up
-            model = (os.path.basename(root) if root == resdir
-                     else root.replace(f'{resdir}/', ''))
+            # Keyed exactly as detect_models names a model
+            group, model = split_model_path(root, resdir)
             hemi, meas = parse_verywise_filenames(name)
 
-            summaries.setdefault(f'{model}/{model}', {})[(meas, hemi)] = summary
+            summaries.setdefault(f'{group}/{model}', {})[(meas, hemi)] = summary
 
     return summaries
 
@@ -200,7 +199,13 @@ def terms_without_clusters(all_results, which_model, which_meas):
             continue
 
         for term, result in (summary.get('results') or {}).items():
-            found[term] = found.get(term, 0) + (result.get('n_clusters') or 0)
+            # A model run without cluster correction reports no count at all.
+            # Reading that as a zero would grey out every one of its terms,
+            # leaving nothing to select, so skip it instead.
+            if 'n_clusters' not in result:
+                continue
+
+            found[term] = found.get(term, 0) + result['n_clusters']
 
     return {term for term, total in found.items() if total == 0}
 
@@ -209,6 +214,29 @@ def _split_meas(parts, start):
     """Join parts[start:start+2] when they form one of the dotted measure names."""
     two = '.'.join(parts[start:start + 2])
     return two if two in SPECIAL_MEAS_NAMES else parts[start]
+
+
+def split_model_path(model_path, resdir):
+    """
+    Name a verywise model from the directory holding it, as (group, model).
+
+    The first folder under the results directory is the group the selector
+    lists it under, and whatever is left is the model:
+
+        results/agesqr                  -> ('agesqr', 'agesqr')
+        results/main analysis/agesqr    -> ('main analysis', 'agesqr')
+        results/a/b/c                   -> ('a', 'b/c')
+
+    A model sitting directly in the results directory is its own group, which
+    is what keeps `model_dir` able to rebuild the path from the pair.
+    """
+    relative = (os.path.basename(model_path) if model_path == resdir
+                else os.path.relpath(model_path, resdir))
+
+    if '/' in relative:
+        return relative.split('/', 1)
+
+    return relative, relative
 
 
 def parse_verywise_filenames(d):
@@ -242,10 +270,8 @@ def detect_models(resdir, results_format):
         parent_dir = os.path.dirname(file_path)
 
         if results_format == 'verywise':
-            model = (os.path.basename(parent_dir) if parent_dir == resdir
-                     else parent_dir.replace(f'{resdir}/', ''))
+            group, model = split_model_path(parent_dir, resdir)
             hemi, meas = parse_verywise_filenames(os.path.basename(file_path))
-            group = model
 
         elif results_format == 'QDECR':  # TODO: adapt this to all QDECR formats
             model, hemi, meas = parse_qdecr_filenames(os.path.basename(parent_dir))
@@ -270,7 +296,7 @@ def model_dir(all_results, which_model, which_meas=None, hemi=None):
     resdir = all_results['results_directory']
     resformat = all_results['results_format']
 
-    group, model = which_model.split('/')
+    group, model = which_model.split('/', 1)
 
     if resformat == 'verywise':
         return f'{resdir}/{group}' if group == model else f'{resdir}/{group}/{model}'
@@ -297,18 +323,82 @@ def detect_terms(all_results, which_model, which_meas):
     return dict(zip(list(stacks.stack_number)[1:], list(stacks.stack_name)[1:]))
 
 
-def result_paths(all_results, which_model, which_term, which_meas, hemi):
-    """Return the (cluster map, coefficient map) paths for one hemisphere."""
-    resformat = all_results['results_format']
+# What a beta map can be thresholded by, and the file each one needs. Models
+# run without cluster correction have no 'ocn' map but may carry p or FDR
+# maps instead; 'all' needs nothing beyond the coefficients.
+MASK_FILES = {'cws': 'cache.th30.abs.sig.ocn.mgh',
+              'p': 'p.mgh',
+              'fdr': 'fdr.mgh'}
+
+
+def _stem(all_results, which_meas, which_term, hemi):
+    """The part of a result file's name before the kind of map it holds."""
+    if all_results['results_format'] == 'QDECR':
+        return f'stack{which_term}'
+
+    return f'{hemi[0]}h.{which_meas}.stack{which_term}'
+
+
+def result_paths(all_results, which_model, which_term, which_meas, hemi,
+                 mask_source='cws'):
+    """
+    Return the (mask map, coefficient map) paths for one hemisphere.
+
+    The mask map is whichever file backs `mask_source`, and None where the
+    betas are shown unthresholded.
+    """
     mdir = model_dir(all_results, which_model, which_meas, hemi=hemi)
+    stem = _stem(all_results, which_meas, which_term, hemi)
 
-    if resformat == 'QDECR':
-        stem = f'stack{which_term}'
-    else:
-        stem = f'{hemi[0]}h.{which_meas}.stack{which_term}'
+    coef_path = os.path.join(mdir, f'{stem}.coef.mgh')
 
-    return (os.path.join(mdir, f'{stem}.cache.th30.abs.sig.ocn.mgh'),
-            os.path.join(mdir, f'{stem}.coef.mgh'))
+    if mask_source is None:
+        return None, coef_path
+
+    return os.path.join(mdir, f'{stem}.{MASK_FILES[mask_source]}'), coef_path
+
+
+def available_masks(all_results, which_model, which_meas):
+    """
+    Which thresholds this model can actually offer, as a set.
+
+    Read from the files on disk rather than from the summary: it is the
+    presence of a map that decides whether an option can be drawn. 'all' is
+    always possible, so it is not listed.
+    """
+    mdir = model_dir(all_results, which_model, which_meas)
+    present = set()
+
+    for hemi in HEMIS:
+        hemi_dir = model_dir(all_results, which_model, which_meas, hemi=hemi)
+        if not os.path.isdir(hemi_dir):
+            continue
+
+        names = os.listdir(hemi_dir)
+        for source, suffix in MASK_FILES.items():
+            if any(name.endswith(f'.{suffix}') for name in names):
+                present.add(source)
+
+    return present
+
+
+def model_resolution(all_results, which_model, which_meas=None):
+    """
+    How many vertices this model was fitted on, or None when unknown.
+
+    Taken from the summaries, so it costs no file reading. It is the ceiling
+    for the display resolution: a coarser mesh can be drawn from a finer map,
+    but not the other way round.
+    """
+    summaries = model_summaries(all_results, which_model)
+
+    sizes = {summary.get('n_vertices') for (meas, _hemi), summary
+             in summaries.items()
+             if which_meas is None or meas == which_meas}
+
+    sizes.discard(None)
+
+    return min(sizes) if sizes else None
 
 
 # ===== READ THE RESULTS =======================================================
@@ -364,22 +454,32 @@ class VWResult(NamedTuple):
         return float(np.nanmin(sign)), float(np.nanmean(sign)), float(np.nanmax(sign))
 
 
-def extract_results(all_results, which_model, which_term, which_meas):
-    """Read the cluster and coefficient maps for one model/term/measure."""
+def extract_results(all_results, which_model, which_term, which_meas,
+                    mask_source='cws', alpha=None):
+    """
+    Read the maps for one model/term/measure.
+
+    `mask_source` says what decides which vertices are shown: 'cws' the
+    cluster map (the only option for cluster-corrected models), 'p' or 'fdr' a
+    p-value map thresholded at `alpha`, or None every vertex that was fitted.
+
+    Only 'cws' yields clusters; the others leave them empty, because a
+    thresholded map has no cluster identity to speak of.
+    """
     betas, mask, clusters, n_clusters = {}, {}, {}, {}
 
     missing_hemis = []
     cluster_offset = 0
 
     for hemi in HEMIS:
-        ocn_path, coef_path = result_paths(
-            all_results, which_model, which_term, which_meas, hemi)
+        mask_path, coef_path = result_paths(
+            all_results, which_model, which_term, which_meas, hemi,
+            mask_source=mask_source)
 
-        if not (os.path.exists(ocn_path) and os.path.exists(coef_path)):
+        if not os.path.exists(coef_path) or (
+                mask_path is not None and not os.path.exists(mask_path)):
             missing_hemis.append(hemi)
             continue
-
-        sign_clusters = _load_mgh(ocn_path, dtype=np.int32)
 
         beta = _load_mgh(coef_path)
 
@@ -390,12 +490,30 @@ def extract_results(all_results, which_model, which_term, which_meas):
         beta[beta == 0.0] = np.nan
 
         betas[hemi] = beta
-        mask[hemi] = sign_clusters > 0
-        n_clusters[hemi] = int(sign_clusters.max())
 
-        # Shift this hemisphere's ids so they do not collide with the other's
-        clusters[hemi] = np.where(sign_clusters > 0, sign_clusters + cluster_offset, 0)
-        cluster_offset += n_clusters[hemi]
+        if mask_source == 'cws':
+            sign_clusters = _load_mgh(mask_path, dtype=np.int32)
+
+            mask[hemi] = sign_clusters > 0
+            n_clusters[hemi] = int(sign_clusters.max())
+
+            # Shift this hemisphere's ids so they do not collide with the other's
+            clusters[hemi] = np.where(sign_clusters > 0,
+                                      sign_clusters + cluster_offset, 0)
+            cluster_offset += n_clusters[hemi]
+        else:
+            if mask_source is None:
+                # Everything that was fitted. The betas are already NaN
+                # outside the cortex, which keeps the medial wall uncoloured.
+                keep = np.isfinite(beta)
+            else:
+                # Raw p values, with the medial wall sitting at 1.0, so the
+                # threshold excludes it without any help
+                keep = _load_mgh(mask_path) < alpha
+
+            mask[hemi] = keep
+            n_clusters[hemi] = 0
+            clusters[hemi] = np.zeros_like(beta, dtype=np.int32)
 
     if missing_hemis:
         raise FileNotFoundError(
@@ -434,6 +552,26 @@ def cluster_stats(result):
     return out
 
 
+def shared_vertices(result1, result2):
+    """
+    How many vertices two results have in common, per hemisphere.
+
+    Models fitted on different meshes can still be compared, because the
+    fsaverage meshes nest: the first 2,562 vertices of fsaverage *are*
+    fsaverage4, in the same order. So the finer map is cut down to the length
+    of the coarser one, which is the same thing the plotting engine does when
+    a map is drawn on a coarser template.
+    """
+    return {hemi: min(len(result1.betas[hemi]), len(result2.betas[hemi]))
+            for hemi in HEMIS}
+
+
+def is_same_mesh(result1, result2):
+    """Whether both results cover the same vertices, hemisphere by hemisphere."""
+    return all(len(result1.betas[hemi]) == len(result2.betas[hemi])
+               for hemi in HEMIS)
+
+
 def compute_difference(result1, result2):
     """
     Subtract one result's beta map from the other, vertex by vertex.
@@ -443,8 +581,15 @@ def compute_difference(result1, result2):
     are NaN in both inputs (extract_results turns the exact zeros there into
     NaN), so they stay NaN here and render uncoloured -- that is why the medial
     wall still looks blank, not because it was masked out.
+
+    Where the two were fitted on different meshes, both are cut to the vertices
+    they share (see `shared_vertices`).
     """
-    return {hemi: result1.betas[hemi] - result2.betas[hemi] for hemi in HEMIS}
+    shared = shared_vertices(result1, result2)
+
+    return {hemi: result1.betas[hemi][:shared[hemi]]
+                  - result2.betas[hemi][:shared[hemi]]
+            for hemi in HEMIS}
 
 
 def compute_overlap(result1, result2):
@@ -454,13 +599,18 @@ def compute_overlap(result1, result2):
     Returns (info, maps) where `maps` codes each vertex as
     1 = result1 only, 2 = result2 only, 3 = both,
     and `info` maps those same codes to [n_vertices, percentage].
+
+    Results on different meshes are cut to the vertices they share.
     """
     maps, counts = {}, {}
+    shared = shared_vertices(result1, result2)
 
     for hemi in HEMIS:
-        # Note: build fresh arrays, never modify the inputs in place
-        maps[hemi] = (result1.mask[hemi].astype(np.int8)
-                      + 2 * result2.mask[hemi].astype(np.int8))
+        # Note: build fresh arrays, never modify the inputs in place, and cut
+        # both down to the vertices the two meshes share
+        n = shared[hemi]
+        maps[hemi] = (result1.mask[hemi][:n].astype(np.int8)
+                      + 2 * result2.mask[hemi][:n].astype(np.int8))
 
         uniques, n = np.unique(maps[hemi], return_counts=True)
         counts[hemi] = {int(u): int(c) for u, c in zip(uniques, n) if u > 0}
