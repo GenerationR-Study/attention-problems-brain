@@ -10,12 +10,12 @@ from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
 import definitions.layout_styles as styles
 from definitions import plotting as vwp
 from definitions.backend_results import (
-    compute_difference, compute_overlap, extract_results, is_same_mesh,
-    shared_vertices,
+    compute_difference, compute_overlap, extract_results, is_fit_map,
+    is_same_mesh, shared_vertices,
 )
 from definitions.pages.common import (
     available_displays, available_resolutions, button_column,
-    default_resolution, figure_outputs, figures_row, info_row,
+    default_resolution, figure_outputs, figures_row, info_row, map_label,
     mark_unselectable, nav_title, resolution_ceiling, resolution_output,
     roi_choice, selection_pane, set_if_changed,
 )
@@ -100,9 +100,12 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
 
     @render.ui
     def compare_mode_ui():
+        # Overlap needs clusters on both sides, which rules out fit maps and
+        # models that were never cluster corrected
         overlap_ok = all(
-            'clusters' in available_displays(all_results(), model, meas)
-            for model, _term, meas in (selection_a(), selection_b()))
+            not is_fit_map(term)
+            and 'clusters' in available_displays(all_results(), model, meas)
+            for model, term, meas in (selection_a(), selection_b()))
 
         return mark_unselectable(
             ui.input_selectize(id='compare_mode', label='Comparison',
@@ -158,10 +161,13 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
 
             # No mask: the difference is shown at every vertex, so the colour
             # scale spans the whole cortex rather than the clusters alone.
+            (model_a, term_a, meas_a), _b, _mode = maps_settings()
+            quantity = _quantity(model_a, term_a, meas_a)
+
             return dict(lh=difference['left'], rh=difference['right'],
                         lh_mask=None, rh_mask=None,
                         cmap=None, discrete=None,
-                        label='β difference (A − B)',
+                        label=f'{quantity} difference (A − B)',
                         mode=vwp.DENSITY, tick_text=None)
 
         info, maps = compute_overlap(result_a, result_b)
@@ -193,10 +199,23 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
                 f'**B** has <ins>{sizes["B"]:,}</ins>: only the '
                 f'<ins>{shared:,}</ins> they share are compared.')
 
+    def _quantity(which_model, which_term, which_meas):
+        """
+        What a chosen map actually holds.
+
+        Two maps are only subtractable when this matches: beta values of the
+        same measure, or the same fit statistic. A coefficient minus an ICC,
+        or thickness minus area, is not interpretable.
+        """
+        if is_fit_map(which_term):
+            return map_label(all_results(), which_model, which_meas, which_term)
+
+        return f'{styles.measure_names.get(which_meas, which_meas)} β'
+
     @render.text
     def info():
         mode, result_a, result_b = both_results()
-        (model_a, _, meas_a), (model_b, _, meas_b), _ = maps_settings()
+        (model_a, term_a, meas_a), (model_b, term_b, meas_b), _ = maps_settings()
 
         mesh_warning = _mesh_warning(result_a, result_b)
 
@@ -204,12 +223,15 @@ def update_compare(input: Inputs, output: Outputs, session: Session,
             difference = compute_difference(result_a, result_b)
             both = np.concatenate([difference[h] for h in ('left', 'right')])
 
+            quantity_a = _quantity(model_a, term_a, meas_a)
+            quantity_b = _quantity(model_b, term_b, meas_b)
+
             warning = ''
-            if meas_a != meas_b:
-                # Subtracting different measures is not meaningful, but the
+            if quantity_a != quantity_b:
+                # Subtracting unlike quantities is not meaningful, but the
                 # overlap of their clusters still is -- so only warn here.
-                warning = (f'</br>⚠️ **A** is <ins>{styles.measure_names[meas_a]}</ins> '
-                           f'but **B** is <ins>{styles.measure_names[meas_b]}</ins>: '
+                warning = (f'</br>⚠️ **A** is <ins>{quantity_a}</ins> '
+                           f'but **B** is <ins>{quantity_b}</ins>: '
                            'their difference is not interpretable.')
 
             return ui.markdown(

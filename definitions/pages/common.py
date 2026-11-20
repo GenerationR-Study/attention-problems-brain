@@ -13,7 +13,8 @@ from shinywidgets import output_widget, render_plotly
 import definitions.layout_styles as styles
 from definitions import plotting as vwp
 from definitions.backend_results import (
-    available_masks, cluster_stats, model_resolution,
+    FIT_MAP_LABELS, available_masks, cluster_stats, detect_fit_maps,
+    is_fit_map, model_resolution,
 )
 from definitions.config import CONFIG, UPSTREAM_NAME, UPSTREAM_REPO
 from definitions.plotting.atlas import region_names
@@ -23,11 +24,30 @@ from definitions.plotting.atlas import region_names
 # Figure arguments
 # ------------------------------------------------------------------------------
 
-def display_args(result, which_output):
+def map_label(all_results, which_model, which_meas, which_term):
+    """What the colourbar should be titled: the quantity, not always a beta."""
+    if not is_fit_map(which_term):
+        return styles.BETA_LABEL
+
+    if str(which_term).startswith('icc'):
+        # The selector can say 'idc' under a 'Random effects (ICC)' heading,
+        # but a colourbar has no heading to lean on
+        random_effects, _fit = detect_fit_maps(all_results, which_model,
+                                               which_meas)
+        factor = random_effects.get(str(which_term))
+
+        return f'ICC ({factor})' if factor else str(which_term).upper()
+
+    return FIT_MAP_LABELS.get(str(which_term), str(which_term).upper())
+
+
+def display_args(result, which_output, label=None):
     """
     Translate a VWResult into the arguments the plotting engine needs, for
     either display mode. Both the brains and the legend are built from these,
     so the two can never disagree about the colour scale.
+
+    `label` titles the colourbar, for the maps that are not beta values.
     """
     if which_output == 'clusters':
         return dict(lh=result.clusters['left'].astype(float),
@@ -46,7 +66,7 @@ def display_args(result, which_output):
                 rh_mask=result.mask['right'],
                 cmap=None,
                 discrete=None,
-                label=styles.BETA_LABEL,
+                label=label or styles.BETA_LABEL,
                 mode=vwp.DENSITY,
                 stats=None)
 
@@ -111,12 +131,21 @@ def mark_unselectable(tag, values):
     return tag
 
 
-def available_displays(all_results, which_model, which_meas):
-    """The Display options this model has the files for."""
+def available_displays(all_results, which_model, which_meas, which_term=None):
+    """
+    The Display options that can be drawn for this choice.
+
+    A fit map (AIC, ICC, R²) is a single quantity per vertex with no
+    threshold to apply, so it offers only the unthresholded view; everything
+    else offers whatever mask files the model has.
+    """
+    if which_term is not None and is_fit_map(which_term):
+        return {'map_all'}
+
     masks = available_masks(all_results, which_model, which_meas)
 
     return {key for key, (source, _) in styles.DISPLAY_MASKS.items()
-            if source is None or source in masks}
+            if key != 'map_all' and (source is None or source in masks)}
 
 
 def default_display(available):
@@ -124,7 +153,8 @@ def default_display(available):
     What to open on: the cluster-corrected view where there is one, then the
     uncorrected and FDR thresholds, and only then the unthresholded map.
     """
-    for key in ('betas_cws', 'betas_p05', 'betas_fdr05', 'betas_all'):
+    for key in ('map_all', 'betas_cws', 'betas_p05', 'betas_fdr05',
+                'betas_all'):
         if key in available:
             return key
 
@@ -251,12 +281,33 @@ def resolution_output(id_, available, selected):
 
 
 def display_output(id_, available, selected):
-    """The Display control, with the options this model cannot draw greyed out."""
-    return mark_unselectable(
-        ui.input_selectize(id=id_, label='Display',
-                           choices=styles.OUTPUT_NAMES, selected=selected,
-                           width='100%'),
-        {key for key in styles.OUTPUT_NAMES if key not in available})
+    """
+    The Display control for one choice of map.
+
+    A fit map has a single possible view, so the control holds only that and
+    is locked: there is nothing to choose, and greying it says so. For a
+    coefficient map the thresholds are all listed, with the ones this model
+    has no files for greyed out -- 'Values (all)' is left out entirely there,
+    since it belongs to the fit maps.
+    """
+    locked = available == {'map_all'}
+
+    shown = ([key for key in styles.OUTPUT_NAMES if key in available] if locked
+             else [key for key in styles.OUTPUT_NAMES if key != 'map_all'])
+
+    control = ui.input_selectize(
+        id=id_, label='Display',
+        choices={key: styles.OUTPUT_NAMES[key] for key in shown},
+        selected=selected, width='100%')
+
+    if locked:
+        # Wrapped rather than disabled: a disabled input is not guaranteed to
+        # report its value, and the value is what the figures are drawn from
+        return ui.div(control, style=styles.LOCKED_INPUT,
+                      title='this map has no threshold to apply')
+
+    return mark_unselectable(control,
+                             {key for key in shown if key not in available})
 
 
 def resolution_choice(id_, selected='fsaverage5'):

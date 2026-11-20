@@ -12,7 +12,7 @@ import pandas as pd
 from great_tables import GT, loc, style
 
 import definitions.layout_styles as styles
-from definitions.backend_results import model_summaries
+from definitions.backend_results import has_groups, model_summaries
 from definitions.config import CONFIG
 from definitions.pages.common import nav_title
 
@@ -104,18 +104,14 @@ def welcome_info_output(input, all_results):
     if CONFIG.preset:
         @render.ui
         def input_folder_info():
-            # No selected_folder: the reader did not choose it, so the summary
-            # does not report a path back at them
-            return describe_input_folder(model_dict=all_results(),
-                                         selected_folder=None)
+            return describe_input_folder(model_dict=all_results())
 
         return
 
     @render.ui
     @reactive.event(input.go_button)
     def input_folder_info():
-        return describe_input_folder(model_dict=all_results(),
-                                     selected_folder=input.results_folder())
+        return describe_input_folder(model_dict=all_results())
 
 
 # ------------------------------------------------------------------------------
@@ -358,16 +354,21 @@ def _fit_table(summaries, keys):
 FULL_MESH = 163842  # fsaverage; anything coarser is flagged as low resolution
 
 
-def _low_res_note(summary):
-    """Say so, in the fold's own line, when a model is not on the full mesh."""
+def _is_low_res(summary):
+    """Whether this model was fitted on something coarser than the full mesh."""
     n_vertices = summary.get('n_vertices')
 
-    if not n_vertices or n_vertices >= FULL_MESH:
+    return bool(n_vertices) and n_vertices < FULL_MESH
+
+
+def _low_res_note(summary):
+    """Say so, in the fold's own line, so it shows while the model is closed."""
+    if not _is_low_res(summary):
         return ''
 
     return (f'<span style="{styles.LOW_RES_NOTE}" '
-            f'title="fitted on {n_vertices:,} vertices, not the full '
-            f'{FULL_MESH:,}">*low res</span>')
+            f'title="fitted on {summary["n_vertices"]:,} vertices, not the '
+            f'full {FULL_MESH:,}">*low-res</span>')
 
 
 def summary_block(model_name, summaries, open_=False):
@@ -381,7 +382,7 @@ def summary_block(model_name, summaries, open_=False):
     formula = ' '.join(str(first.get('model', '')).split())
 
     return (f'<details{" open" if open_ else ""} '
-            f'style="{styles.SUMMARY_DETAILS}">'
+            f'style="{styles.summary_details(_is_low_res(first))}">'
             f'<summary><b>{model_name}</b>&emsp;<code>{formula}</code>'
             f'{_low_res_note(first)}</summary>'
             f'<div style="{styles.SUMMARY_BODY}">'
@@ -393,7 +394,7 @@ def summary_block(model_name, summaries, open_=False):
             f'</details>')
 
 
-def describe_input_folder(model_dict, selected_folder):
+def describe_input_folder(model_dict):
 
     tab_spacing = '&emsp;&emsp;&emsp;'  # space between the "columns"
     info_text = ''
@@ -401,6 +402,7 @@ def describe_input_folder(model_dict, selected_folder):
     # the blank lines inside it as the end of the HTML, so described models are
     # kept apart and passed through as HTML
     described_blocks = []
+    grouped = has_groups(model_dict)  # folders worth naming, or all in one
     n_described = 0  # counted across the whole folder: in verywise results a
                      # group holds a single model, so a per-group count would
                      # leave every block open
@@ -419,7 +421,13 @@ def describe_input_folder(model_dict, selected_folder):
                 n_described += 1
 
         if described:
-            described_blocks.extend(described)
+            if grouped:
+                # Name the folder, and indent what came out of it
+                described_blocks.append(
+                    f'<div style="{styles.GROUP_HEADING}">{dir}</div>'
+                    f'<div style="{styles.GROUP_BODY}">{"".join(described)}</div>')
+            else:
+                described_blocks.extend(described)
             continue
 
         sub_text = f'</br>&emsp;**{dir}**<table>'
@@ -451,11 +459,6 @@ def describe_input_folder(model_dict, selected_folder):
 
         info_text = info_text + sub_text + '</table>'
 
-    # A configured wizard was not pointed anywhere by whoever is reading it,
-    # so there is no selection to report back
-    chosen = (f'You have selected the directory: `{selected_folder}`</br></br>'
-              if selected_folder else '')
-
     return ui.TagList(
-        ui.markdown(f'{chosen}Models:{info_text}</br>'),
+        ui.markdown(f'Model summaries:{info_text}</br>'),
         *[ui.HTML(block) for block in described_blocks])

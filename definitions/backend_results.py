@@ -291,6 +291,20 @@ def detect_models(resdir, results_format):
             'summaries': find_model_summaries(resdir, results_format)}
 
 
+def has_groups(all_results):
+    """
+    Whether the results are organised in folders, or all in one.
+
+    A model that sits directly in the results directory is its own group (see
+    `split_model_path`), so when every group names a single model after itself
+    there is no structure to show -- and the model selector should not invent
+    one by grouping each model under its own heading.
+    """
+    return any(model != group
+               for group, data in all_results['results'].items()
+               for model in data.model.unique())
+
+
 def model_dir(all_results, which_model, which_meas=None, hemi=None):
     """Directory holding the result files for one model (and hemisphere, for QDECR)."""
     resdir = all_results['results_directory']
@@ -323,6 +337,107 @@ def detect_terms(all_results, which_model, which_meas):
     return dict(zip(list(stacks.stack_number)[1:], list(stacks.stack_name)[1:]))
 
 
+# ===== FIT MAPS AS TERMS ======================================================
+# Besides one coefficient map per term, newer verywise versions write the fit
+# itself per vertex. These are selected like a term, but they are not
+# coefficients: nothing is thresholded, and 0 is a real value rather than a
+# vertex outside the cortex.
+
+FIT_MAP_KEY_RE = re.compile(r'^(?:aic|r2c|r2m|icc(?P<index>\d+))$')
+
+FIT_MAP_LABELS = {'aic': 'AIC',
+                  'r2c': 'Conditional R²',
+                  'r2m': 'Marginal R²'}
+
+
+def is_fit_map(which_term):
+    """Whether a term names a fit map rather than a model coefficient."""
+    return bool(FIT_MAP_KEY_RE.match(str(which_term)))
+
+
+def _icc_names(all_results, which_model, which_meas):
+    """
+    What each ICC map is the ICC *of*, in file order.
+
+    icc1, icc2, ... follow the order the formula lists the grouping factors,
+    which is the order the summary reports them in -- confirmed by their
+    per-vertex medians matching the summary's. Without a summary they stay
+    numbered.
+    """
+    for (meas, _hemi), summary in model_summaries(all_results, which_model).items():
+        if meas != which_meas:
+            continue
+
+        icc = (summary.get('model_fit') or {}).get('ICC') or {}
+        if icc:
+            return list(icc)
+
+    return []
+
+
+def detect_fit_maps(all_results, which_model, which_meas):
+    """
+    The fit maps this model wrote, as {term key: label}, split into the
+    random-effect ones and the rest.
+
+    Returns (random_effects, model_fit), either of which may be empty.
+    """
+    if all_results['results_format'] != 'verywise':
+        return {}, {}
+
+    mdir = model_dir(all_results, which_model, which_meas)
+    present = set()
+
+    for hemi in HEMIS:
+        hemi_dir = model_dir(all_results, which_model, which_meas, hemi=hemi)
+        if not os.path.isdir(hemi_dir):
+            continue
+
+        prefix = f'{hemi[0]}h.{which_meas}.'
+        for name in os.listdir(hemi_dir):
+            if not (name.startswith(prefix) and name.endswith('.mgh')):
+                continue
+
+            stat = name[len(prefix):-len('.mgh')]
+            if is_fit_map(stat):
+                present.add(stat)
+
+    names = _icc_names(all_results, which_model, which_meas)
+
+    random_effects = {}
+    for stat in sorted(present, key=lambda k: int(k[3:]) if k.startswith('icc') else 0):
+        if not stat.startswith('icc'):
+            continue
+
+        # Just the grouping factor: the group these sit under already says
+        # they are ICCs. Where no summary names them, the number stands in.
+        index = int(stat[3:])
+        random_effects[stat] = (names[index - 1] if index <= len(names)
+                                else str(index))
+
+    model_fit = {stat: FIT_MAP_LABELS[stat] for stat in ('r2c', 'r2m', 'aic')
+                 if stat in present}
+
+    return random_effects, model_fit
+
+
+def term_groups(all_results, which_model, which_meas):
+    """
+    Everything that can be plotted for one model, grouped for the selector:
+    its coefficients, then the random-effect maps, then the fit maps.
+    """
+    groups = {'Fixed effects': detect_terms(all_results, which_model, which_meas)}
+
+    random_effects, model_fit = detect_fit_maps(all_results, which_model,
+                                               which_meas)
+    if random_effects:
+        groups['Random effects (ICC)'] = random_effects
+    if model_fit:
+        groups['Model fit'] = model_fit
+
+    return groups
+
+
 # What a beta map can be thresholded by, and the file each one needs. Models
 # run without cluster correction have no 'ocn' map but may carry p or FDR
 # maps instead; 'all' needs nothing beyond the coefficients.
@@ -348,6 +463,12 @@ def result_paths(all_results, which_model, which_term, which_meas, hemi,
     betas are shown unthresholded.
     """
     mdir = model_dir(all_results, which_model, which_meas, hemi=hemi)
+
+    if is_fit_map(which_term):
+        # A fit map is the whole file, and has nothing to threshold by
+        return None, os.path.join(mdir, f'{hemi[0]}h.{which_meas}.'
+                                        f'{which_term}.mgh')
+
     stem = _stem(all_results, which_meas, which_term, hemi)
 
     coef_path = os.path.join(mdir, f'{stem}.coef.mgh')
@@ -468,6 +589,10 @@ def extract_results(all_results, which_model, which_term, which_meas,
     """
     betas, mask, clusters, n_clusters = {}, {}, {}, {}
 
+    # A fit map is never thresholded, whatever the display setting says
+    if is_fit_map(which_term):
+        mask_source, alpha = None, None
+
     missing_hemis = []
     cluster_offset = 0
 
@@ -483,11 +608,16 @@ def extract_results(all_results, which_model, which_term, which_meas,
 
         beta = _load_mgh(coef_path)
 
-        # Vertices outside the cortex come out as exact zeros. Treat them as
+        # Vertices outside the cortex come out as exact zeros in a
+        # coefficient map. In a fit map zero is a real value -- an ICC of 0
+        # means that factor holds none of the variance -- and the cortex
+        # boundary is already non-finite, so leave those alone.
+        # Treat them as
         # missing, so they neither colour the surface nor pile up at zero in
         # the density estimate. (Note: the cluster map's zeros are meaningful --
         # they mark non-significant vertices -- so only the betas are touched.)
-        beta[beta == 0.0] = np.nan
+        if not is_fit_map(which_term):
+            beta[beta == 0.0] = np.nan
 
         betas[hemi] = beta
 

@@ -1,13 +1,15 @@
 """The MAIN RESULTS tab: one map, drawn as beta values or as clusters."""
+import numpy as np
 from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
 
 import definitions.layout_styles as styles
 from definitions.backend_results import extract_results
+from definitions.backend_results import is_fit_map
 from definitions.pages.common import (
     available_displays, available_resolutions, button_column, default_display,
     default_resolution, display_args, display_output, figure_outputs,
-    figures_row, info_row, nav_title, resolution_ceiling, resolution_output,
-    roi_choice, selection_pane, set_if_changed,
+    figures_row, info_row, map_label, nav_title, resolution_ceiling,
+    resolution_output, roi_choice, selection_pane, set_if_changed,
 )
 from definitions.pages.download import (
     DOWNLOAD_TRIGGER_JS, download_buttons, wire_download,
@@ -80,9 +82,10 @@ def update_single_result(input: Inputs, output: Outputs, session: Session,
 
     @render.ui
     def display_ui():
-        which_model, _which_term, which_meas = selection()
+        which_model, which_term, which_meas = selection()
 
-        available = available_displays(all_results(), which_model, which_meas)
+        available = available_displays(all_results(), which_model, which_meas,
+                                       which_term)
 
         return display_output('select_output', available,
                               default_display(available))
@@ -122,12 +125,30 @@ def update_single_result(input: Inputs, output: Outputs, session: Session,
 
     @reactive.Calc
     def plot_args():
-        return display_args(result_data(), req(display_setting()))
+        which_model, which_term, which_meas = req(data_settings())
+
+        return display_args(
+            result_data(), req(display_setting()),
+            label=map_label(all_results(), which_model, which_meas, which_term))
 
     @render.text
     def info():
         result = result_data()
         which_output = req(display_setting())
+        which_model, which_term, which_meas = req(data_settings())
+
+        if is_fit_map(which_term):
+            # One quantity per vertex, nothing thresholded: report where it
+            # sits, by the median rather than the mean, since these are
+            # skewed and the median is what the model summary reports
+            both = np.concatenate([result.betas[h] for h in ('left', 'right')])
+            finite = both[np.isfinite(both)]
+            name = map_label(all_results(), which_model, which_meas, which_term)
+
+            return ui.markdown(
+                f'**{name}** across {finite.size:,} vertices: '
+                f'median **{np.median(finite):.4g}** '
+                f'[{finite.min():.4g}; {finite.max():.4g}]')
 
         mask_source, _alpha = styles.DISPLAY_MASKS[which_output]
 

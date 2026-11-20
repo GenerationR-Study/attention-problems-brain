@@ -8,7 +8,9 @@ written once.
 from shiny import module, reactive, render, ui
 
 import definitions.layout_styles as styles
-from definitions.backend_results import detect_terms, terms_without_clusters
+from definitions.backend_results import (
+    has_groups, term_groups, terms_without_clusters,
+)
 from definitions.pages.common import mark_unselectable
 
 
@@ -33,12 +35,22 @@ def map_selector_server(input, output, session, all_results):
 
     @render.ui
     def model_ui():
+        results = all_results()['results']
+
+        # Nested results keep their folders as groups in the dropdown; a flat
+        # folder would otherwise put every model under a heading of its own
+        grouped = has_groups(all_results())
+
         all_models = {}
-        for group in all_results()['results']:
-            sub_models = list(all_results()['results'][group]['model'].unique())
+        for group in results:
+            sub_models = list(results[group]['model'].unique())
             # TMP: names are kept as they are
-            all_models[group] = dict(zip([f'{group}/{m}' for m in sub_models],
-                                         sub_models))
+            choices = dict(zip([f'{group}/{m}' for m in sub_models], sub_models))
+
+            if grouped:
+                all_models[group] = choices
+            else:
+                all_models.update(choices)
 
         return ui.input_selectize(id='select_model',
                                   label='Choose model',
@@ -60,26 +72,31 @@ def map_selector_server(input, output, session, all_results):
     def term_ui():
         which_model, which_meas = input.select_model(), input.select_measure()
 
-        avail_terms = detect_terms(all_results=all_results(),
-                                   which_model=which_model,
-                                   which_meas=which_meas)
+        # The model's coefficients, then its random-effect and fit maps
+        groups = term_groups(all_results(), which_model, which_meas)
 
-        # Terms that found nothing for this measure would only ever draw an
-        # empty brain, so they are shown but cannot be chosen
+        # Coefficients that found nothing for this measure would only ever
+        # draw an empty brain, so they are shown but cannot be chosen. Fit
+        # maps are never empty in that sense.
         empty = terms_without_clusters(all_results(), which_model, which_meas)
 
-        unselectable = {str(stack) for stack, term in avail_terms.items()
-                        if term in empty}
+        unselectable = {str(key) for key, label
+                        in groups.get('Fixed effects', {}).items()
+                        if label in empty}
 
         # ...which means the starting choice has to be one of the others.
-        # Keys are stack numbers, and `selected` is matched against the key
-        # itself, so a stringified one would silently match nothing.
-        selectable = [stack for stack in avail_terms
-                      if str(stack) not in unselectable]
+        # `selected` is matched against the key itself, so a stringified
+        # stack number would silently match nothing.
+        selectable = [key for group in groups.values() for key in group
+                      if str(key) not in unselectable]
+
+        # One group is shown as a plain list, several as labelled groups
+        choices = (groups if len(groups) > 1
+                   else next(iter(groups.values()), {}))
 
         return mark_unselectable(
             ui.input_selectize(id='select_term', label='Choose term',
-                               choices=avail_terms,
+                               choices=choices,
                                selected=selectable[0] if selectable else None,
                                width='100%'),
             unselectable)

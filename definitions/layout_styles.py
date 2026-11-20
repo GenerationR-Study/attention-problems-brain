@@ -14,7 +14,7 @@ VW_COLOR_PALETTE = {'dark-blue': '#000055',
 VWW_BLUE = '#001f60'
 VWW_RED = '#95013a'
 VWW_GREY = '#c7cfe2'
-VWW_PINK = '#d4acb8'
+VWW_PINK = '#e4d1d7'
 
 # --- NAVBAR -------------------------------------------------------------------
 # The logo sets the navbar's height, and a fixed-top navbar covers the top of
@@ -79,9 +79,12 @@ MAP_ROW =  f'display: flex; align-items: center; ' \
 INFO_MESSAGE = 'text-align: center; padding-top: 10px; padding-bottom: 10px'
 
 # --- The model summaries on the home page -------------------------------------
-SUMMARY_DETAILS = f'margin: 6px 0; padding: 8px 12px; border-radius: 10px; ' \
-                  f'border: 1px solid {VW_COLOR_PALETTE["light-blue"]}; ' \
-                  f'background-color: white'
+def summary_details(low_res=False):
+    """The card around one model, outlined in pink when it is not full mesh."""
+    border = VWW_PINK if low_res else VW_COLOR_PALETTE['light-blue']
+
+    return (f'margin: 6px 0; padding: 8px 12px; border-radius: 10px; '
+            f'border: 1px solid {border}; background-color: white')
 
 # How much of the surface a term's clusters cover, drawn beside the count:
 # an empty track with a filled part, as in the great-tables examples
@@ -137,6 +140,13 @@ details > summary::-webkit-details-marker {{ color: {VW_COLOR_PALETTE["deep-blue
     color: {VW_COLOR_PALETTE["deep-blue"]};
 }}
 """
+
+# The folder a set of models came from, where the results are organised in
+# folders rather than all sitting together
+GROUP_HEADING = f'margin: 14px 0 2px 0; font-weight: bold; ' \
+                f'color: {VW_COLOR_PALETTE["deep-blue"]}'
+
+GROUP_BODY = 'padding-left: 18px'
 
 # Everything below the <summary> line is indented clear of the fold's marker,
 # so it sits under the formula rather than under the triangle
@@ -207,17 +217,22 @@ RESOLUTION_NAMES = {'fsaverage4': 'Very low (2.5k nodes)',
 # What to draw, and what each option needs. The ones whose files a model does
 # not have are shown greyed out rather than hidden, so it stays clear what the
 # analysis did and did not produce. See DISPLAY_MASKS for what backs each one.
-OUTPUT_NAMES = {'betas_cws': 'Beta values (CWS)',
+OUTPUT_NAMES = {'map_all': 'Values (all)',
+                'betas_cws': 'Betas (CWS)',
                 'clusters': 'Clusters',
-                'betas_all': 'Beta values (all)',
-                'betas_p05': 'Beta values (p < 0.05)',
-                'betas_p01': 'Beta values (p < 0.01)',
-                'betas_fdr05': 'Beta values (FDR p < 0.05)',
-                'betas_fdr01': 'Beta values (FDR p < 0.01)'}
+                'betas_all': 'Betas (all)',
+                'betas_p05': 'Betas (p < 0.05)',
+                'betas_p01': 'Betas (p < 0.01)',
+                'betas_fdr05': 'Betas (FDRp < 0.05)',
+                'betas_fdr01': 'Betas (FDRp < 0.01)'}
+
+# A control with nothing to choose: visible, greyed, and inert
+LOCKED_INPUT = 'opacity: 0.6; pointer-events: none'
 
 # display option -> (mask source, threshold). A source of None shows every
 # vertex that was fitted, and needs nothing but the coefficient map.
-DISPLAY_MASKS = {'betas_cws': ('cws', None),
+DISPLAY_MASKS = {'map_all': (None, None),
+                 'betas_cws': ('cws', None),
                  'clusters': ('cws', None),
                  'betas_all': (None, None),
                  'betas_p05': ('p', 0.05),
