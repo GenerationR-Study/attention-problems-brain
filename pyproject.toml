@@ -26,6 +26,8 @@ dependencies = [
     "matplotlib>=3.9",        # colormap objects only, no figure rendering
     # --- results fetching ---
     "requests>=2.32",
+    "pyyaml>=6.0",            # verywise model.summary.yml files
+    "great-tables>=1.1.0",
 ]
 
 [dependency-groups]

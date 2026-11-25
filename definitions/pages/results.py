@@ -1,11 +1,15 @@
 """The MAIN RESULTS tab: one map, drawn as beta values or as clusters."""
+import numpy as np
 from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
 
 import definitions.layout_styles as styles
 from definitions.backend_results import extract_results
+from definitions.backend_results import is_fit_map
 from definitions.pages.common import (
-    button_column, display_args, figure_outputs, figures_row, info_row,
-    nav_title, roi_choice, selection_pane, set_if_changed,
+    available_displays, available_resolutions, button_column, default_display,
+    default_resolution, display_args, display_output, figure_outputs,
+    figures_row, info_row, map_label, nav_title, resolution_ceiling,
+    resolution_output, roi_choice, selection_pane, set_if_changed,
 )
 from definitions.pages.download import (
     DOWNLOAD_TRIGGER_JS, download_buttons, wire_download,
@@ -33,9 +37,9 @@ def single_result_ui():
         ui.layout_columns(
             selection_pane(
                 *map_selector_ui('selector'),
-                ui.input_selectize(id='select_output', label='Display',
-                                   choices=styles.OUTPUT_NAMES, selected='betas',
-                                   width='100%'),
+                # Rendered by the server: which views a model can show
+                # depends on the files it has
+                ui.output_ui('display_ui'),
                 roi_choice('select_roi'),
                 col_widths=(4, 5, 3, 2, 10),
             ),
@@ -76,6 +80,26 @@ def update_single_result(input: Inputs, output: Outputs, session: Session,
                                         input.select_resolution(),
                                         selected_roi()))
 
+    @render.ui
+    def display_ui():
+        which_model, which_term, which_meas = selection()
+
+        available = available_displays(all_results(), which_model, which_meas,
+                                       which_term)
+
+        return display_output('select_output', available,
+                              default_display(available))
+
+    @render.ui
+    def resolution_ui():
+        which_model, _which_term, _which_meas = selection()
+
+        available = available_resolutions(
+            resolution_ceiling(all_results(), which_model))
+
+        return resolution_output('select_resolution', available,
+                                 default_resolution(available))
+
     @reactive.Calc
     def figure_title():
         which_model, _which_term, which_meas = req(data_settings())
@@ -87,21 +111,61 @@ def update_single_result(input: Inputs, output: Outputs, session: Session,
     def result_data():
         which_model, which_term, which_meas = req(data_settings())
 
+        # Which vertices count as shown depends on the chosen view
+        mask_source, alpha = styles.DISPLAY_MASKS[req(display_setting())]
+
         with ui.Progress(min=0, max=1) as p:
             p.set(0, message='Loading results...')
 
             return extract_results(all_results=all_results(),
                                    which_model=which_model,
                                    which_term=which_term,
-                                   which_meas=which_meas)
+                                   which_meas=which_meas,
+                                   mask_source=mask_source, alpha=alpha)
 
     @reactive.Calc
     def plot_args():
-        return display_args(result_data(), req(display_setting()))
+        which_model, which_term, which_meas = req(data_settings())
+
+        return display_args(
+            result_data(), req(display_setting()),
+            label=map_label(all_results(), which_model, which_meas, which_term))
 
     @render.text
     def info():
         result = result_data()
+        which_output = req(display_setting())
+        which_model, which_term, which_meas = req(data_settings())
+
+        if is_fit_map(which_term):
+            # One quantity per vertex, nothing thresholded: report where it
+            # sits, by the median rather than the mean, since these are
+            # skewed and the median is what the model summary reports
+            both = np.concatenate([result.betas[h] for h in ('left', 'right')])
+            finite = both[np.isfinite(both)]
+            name = map_label(all_results(), which_model, which_meas, which_term)
+
+            return ui.markdown(
+                f'**{name}** across {finite.size:,} vertices: '
+                f'median **{np.median(finite):.4g}** '
+                f'[{finite.min():.4g}; {finite.max():.4g}]')
+
+        mask_source, _alpha = styles.DISPLAY_MASKS[which_output]
+
+        min_beta, mean_beta, max_beta = result.beta_summary()
+        betas = (f'Mean beta value [range] = **{mean_beta:.2f}** '
+                 f'[{min_beta:.2f}; {max_beta:.2f}]')
+
+        if mask_source != 'cws':
+            # Nothing was clustered, so count the vertices that are shown
+            # instead: the share of the surface this view puts on screen
+            shown = sum(int(result.mask[hemi].sum()) for hemi in ('left', 'right'))
+            total = sum(result.mask[hemi].size for hemi in ('left', 'right'))
+
+            return ui.markdown(
+                f'**{shown:,}** vertices shown out of {total:,} '
+                f'({shown / total:.1%} of the surface), '
+                f'*{styles.OUTPUT_NAMES[which_output]}*.<br />{betas}')
 
         l_nc = result.n_clusters['left']
         r_nc = result.n_clusters['right']
@@ -110,11 +174,9 @@ def update_single_result(input: Inputs, output: Outputs, session: Session,
             return ui.markdown(
                 '**0** clusters identified (in the left or the right hemisphere).')
 
-        min_beta, mean_beta, max_beta = result.beta_summary()
-
         return ui.markdown(
             f'**{l_nc + r_nc}** clusters identified ({l_nc} in the left and {r_nc} in the right hemisphere).<br />'
-            f'Mean beta value [range] = **{mean_beta:.2f}** [{min_beta:.2f}; {max_beta:.2f}]')
+            f'{betas}')
 
     figure_outputs(plot_args, brain_settings)
 
