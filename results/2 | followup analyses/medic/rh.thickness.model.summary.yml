@@ -1,0 +1,95 @@
+model: ~ att + medication + age + age2 + sex + cohort + educm + psych_m + tobacco
+  + age_m + (1 | idc) + (1 | site) + (1 | ethn)
+n_datasets: 30
+n_observations: 25064
+n_observations_effective: 25015
+n_groups:
+  idc: 12709
+  site: 23
+  ethn: 11
+n_vertices: 2562
+n_vertices_effective: 1831
+model_fit:
+  Singular fits:
+    count: 11
+    percent: 1.0
+  AIC:
+    min: -36779.0
+    median: -12668.9551
+    max: 26117.4199
+  Conditional R²:
+    min: 0.3019
+    median: 0.6328
+    max: 0.7852
+  Marginal R²:
+    min: 0.0039
+    median: 0.0562
+    max: 0.4149
+  ICC:
+    idc:
+      min: 0.2406
+      median: 0.5792
+      max: 0.7635
+    site:
+      min: 0.0
+      median: 0.0152
+      max: 0.1473
+    ethn:
+      min: 0.0
+      median: 0.0042
+      max: 0.045
+results:
+  (Intercept):
+    min: 1.5461
+    median: 2.9544
+    max: 4.5444
+  att:
+    min: -0.003
+    median: 0.0003
+    max: 0.0044
+  medicationyes:
+    min: -0.0191
+    median: 0.0021
+    max: 0.0336
+  age:
+    min: -0.1309
+    median: -0.0312
+    max: 0.0541
+  age2:
+    min: -0.0021
+    median: 0.0004
+    max: 0.0041
+  sexgirl:
+    min: -0.0701
+    median: 0.0066
+    max: 0.1408
+  cohortABCD:
+    min: -0.2834
+    median: 0.0661
+    max: 0.5127
+  educmMedium:
+    min: -0.0259
+    median: 0.0037
+    max: 0.0258
+  educmHigh:
+    min: -0.0298
+    median: 0.0071
+    max: 0.0334
+  psych_m:
+    min: -0.0106
+    median: -0.0001
+    max: 0.0076
+  tobaccoyes:
+    min: -0.0274
+    median: 0.0002
+    max: 0.0353
+  age_m:
+    min: -0.0028
+    median: 0.0003
+    max: 0.0034
+cluster_correction: ''
+covariance_between_terms: ''
+random_seed: 3108
+date: '2026-10-15'
+computation_time_min: 57.0184203
+verywise_version: 1.3.8
